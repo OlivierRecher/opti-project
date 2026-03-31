@@ -1,0 +1,121 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+
+\begin{document}
+
+\section{Projet : VNF Chain Optimization}
+
+Ce notebook formalise la logique et la modélisation mathématique pour résoudre le projet d'optimisation (placements de VNF sur des serveurs).
+
+\subsection{Objectif Global}
+Trouver un placement optimal de $n$ fonctions réseau virtuelles (VNF) sur $m$ serveurs physiques qui minimise la charge maximale parmi tous les serveurs (le goulot d'étranglement ou \textbf{cycle time} $CT$), tout en respectant les contraintes de précédence entre les VNF.
+
+\vspace{1em}
+\hrule
+\vspace{1em}
+
+\section{Phase 1 : Solution Exacte (MILP)}
+
+Cette phase formalise le problème comme un programme linéaire en nombres entiers (MILP) et utilise Gurobi pour trouver la solution optimale.
+
+\subsection{1. Formulation Mathématique}
+
+\subsubsection{1.1 Variables de Décision}
+
+\begin{itemize}
+    \item $x_{jk} \in \{0, 1\}$ : Vaut 1 si la VNF $j$ est placée sur le serveur $k$, 0 sinon.
+    \item $s_j \in \{1, \dots, m\}$ : Indice du serveur sur lequel la VNF $j$ est placée.
+    \item $CT \ge 0$ : Le "Cycle Time" ou latence du goulot d'étranglement (charge maximale d'un serveur).
+\end{itemize}
+
+\subsubsection{1.2 Fonction Objectif}
+
+Minimiser $CT$
+
+\subsubsection{1.3 Contraintes}
+
+\begin{enumerate}
+    \item \textbf{Unicité du placement} : Chaque VNF $j$ doit être placée sur exactement un serveur.
+    \[\sum_{k=1}^m x_{jk} = 1 \quad \forall j \in J\]
+
+    \item \textbf{Définition de l'indice du serveur} : Lien entre les variables binaires $x$ et l'indice $s_j$.
+    \[s_j = \sum_{k=1}^m k \cdot x_{jk} \quad \forall j \in J\]
+
+    \item \textbf{Respect des précédences} : Pour chaque arc $(i, j) \in P$, la VNF $i$ doit être placée sur le même serveur ou un serveur précédent par rapport à $j$.
+    \[s_i \le s_j \quad \forall (i, j) \in P\]
+
+    \item \textbf{Goulot d'étranglement} : La somme des temps de traitement sur n'importe quel serveur $k$ ne doit pas dépasser le cycle time.
+    \[\sum_{j=1}^n t_j \cdot x_{jk} \le CT \quad \forall k \in K\]
+\end{enumerate}
+
+\subsection{2. Résultats et Analyse}
+
+\subsubsection{2.1 Tableau des résultats}
+
+Le tableau suivant regroupe les résultats de notre modèle MILP sur les 24 instances du benchmark SALBPGen. Le nombre de serveurs $m$ est spécifique à chaque instance (issu du benchmark). Une limite de temps de 30 minutes par instance a été imposée.
+
+\begin{table}[h!]
+\centering
+\small
+\begin{tabular}{l c c c c c c c}
+\toprule
+\textbf{Instance} & $\boldsymbol{n}$ & $\boldsymbol{m}$ & \textbf{OS} & \textbf{Préc.} & \textbf{$\sum t_j$} & $\boldsymbol{CT^*}$ & \textbf{Temps (s)} \\
+\midrule
+n=20\_1  & 20 & 3  & 0.268 & 16 & 2882  & 962  & 0.054 \\
+n=20\_2  & 20 & 3  & 0.300 & 19 & 2861  & 954  & 0.007 \\
+n=20\_3  & 20 & 3  & 0.300 & 18 & 2785  & 930  & 0.056 \\
+n=20\_4  & 20 & 3  & 0.289 & 18 & 2727  & 909  & 0.036 \\
+n=20\_5  & 20 & 3  & 0.289 & 18 & 2837  & 950  & 0.076 \\
+n=20\_6  & 20 & 3  & 0.295 & 19 & 2914  & 973  & 0.045 \\
+n=20\_7  & 20 & 3  & 0.300 & 18 & 2786  & 930  & 0.041 \\
+n=20\_8  & 20 & 3  & 0.289 & 20 & 2985  & 996  & 0.071 \\
+n=20\_9  & 20 & 3  & 0.289 & 18 & 2925  & 976  & 0.055 \\
+n=20\_10 & 20 & 3  & 0.279 & 17 & 2831  & 945  & 0.067 \\
+n=20\_11 & 20 & 3  & 0.279 & 18 & 2766  & 924  & 0.089 \\
+n=20\_12 & 20 & 3  & 0.300 & 17 & 2930  & 977  & 0.023 \\
+n=20\_13 & 20 & 3  & 0.268 & 17 & 2896  & 967  & 0.078 \\
+n=20\_14 & 20 & 3  & 0.263 & 17 & 2979  & 994  & 0.086 \\
+n=20\_15 & 20 & 3  & 0.295 & 18 & 2981  & 994  & 0.037 \\
+n=20\_16 & 20 & 12 & 0.232 & 17 & 10376 & 981  & 0.751 \\
+n=20\_17 & 20 & 10 & 0.295 & 17 & 9134  & 969  & 0.366 \\
+n=20\_18 & 20 & 11 & 0.300 & 20 & 9524  & 960  & 0.191 \\
+n=20\_19 & 20 & 14 & 0.268 & 18 & 11113 & 1000 & 0.240 \\
+n=20\_20 & 20 & 11 & 0.295 & 17 & 9829  & 1000 & 0.298 \\
+\midrule
+n=50\_1  & 50 & 8  & 0.196 & 58 & 7276  & 910  & 11.52 \\
+n=50\_2  & 50 & 6  & 0.195 & 56 & 5585  & 931  & 1.49  \\
+\midrule
+n=100\_1 & 100 & 23 & 0.196 & 105 & 22723 & N/A$^\dagger$ & $>$1800 \\
+n=100\_2 & 100 & 21 & 0.195 & 104 & 20262 & N/A$^\dagger$ & $>$89  \\
+\bottomrule
+\end{tabular}
+\caption{Résultats complets de l'optimisation MILP (Phase 1). $^\dagger$Instances n'ayant pas convergé dans la limite de 30 minutes.}
+\label{tab:results}
+\end{table}
+
+\subsubsection{2.2 Analyse graphique des performances}
+
+La figure \ref{fig:resol_time} illustre l'évolution du temps de résolution en fonction de la taille de l'instance et de l'Order Strength.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=\textwidth]{resol_time_analysis.png}
+    \caption{Temps de résolution en fonction de la taille du problème ($n$) et de l'Order Strength (OS).}
+    \label{fig:resol_time}
+\end{figure}
+
+\subsection{Conclusions}
+\begin{itemize}
+    \item \textbf{Instances $n=20$} : Toutes les 20 instances sont résolues à l'optimalité en moins d'une seconde ($\leq 0.75$s). Les $CT^*$ obtenus respectent la borne $CT \leq 1000$ imposée par le benchmark. Les instances 1--15 ($m=3$) sont les plus rapides ; les instances 16--20 ($m \geq 10$), plus coûteuses en nombre de variables binaires, restent néanmoins résolues très efficacement.
+    \item \textbf{Instances $n=50$} : Résolues à l'optimalité en 1.5s à 11.5s. L'augmentation significative du temps pour n=50\_1 ($m=8$) par rapport à n=50\_2 ($m=6$) illustre l'impact du nombre de serveurs sur la combinatoire ($n \times m$ variables binaires).
+    \item \textbf{Instances $n=100$} : Non résolues dans la limite de 30 minutes. Avec $m \geq 21$ serveurs, le modèle comporte plus de $n \times m = 2100$ variables binaires, rendant l'exploration du Branch-and-Bound très coûteuse. Cela motive le recours aux heuristiques (Phase 2).
+    \item \textbf{Impact de $m$ vs.\ $n$} : Le facteur déterminant pour la difficulté n'est pas uniquement $n$ mais le produit $n \times m$, qui détermine le nombre de variables binaires $x_{jk}$.
+\end{itemize}
+
+\end{document}
