@@ -9,106 +9,30 @@ from gurobipy import GRB
 from salbp_parser import parse_alb_file
 
 
-def solve_salbp(J, K, P, t):
-    """
-    Résout le SALBP-1 (minimisation du cycle time) par MILP.
-
-    Retourne (model, x, s, CT) après optimisation.
-    """
-    model = gp.Model("VNF_Placement")
+def solve_m1(J, K, P, t, time_limit=1800, output_flag=0):
+    """Solve SALBP-2 baseline model M1 (minimize CT)."""
+    model = gp.Model("M1_CT")
 
     x = model.addVars(J, K, vtype=GRB.BINARY, name="x")
-    s = model.addVars(J, vtype=GRB.INTEGER, lb=1, ub=len(K), name="s")
-    CT = model.addVar(vtype=GRB.CONTINUOUS, lb=0, name="CT")
+    s = model.addVars(J, vtype=GRB.INTEGER, lb=min(K), ub=max(K), name="s")
+    CT = model.addVar(vtype=GRB.CONTINUOUS, lb=0.0, name="CT")
 
-    # Chaque tâche est assignée à exactement un serveur
-    model.addConstrs((x.sum(j, '*') == 1 for j in J), name="unicite")
-
-    # Lien entre x et s : s[j] = somme(k * x[j,k])
+    model.addConstrs((x.sum(j, "*") == 1 for j in J), name="assign")
     model.addConstrs(
         (s[j] == gp.quicksum(k * x[j, k] for k in K) for j in J),
-        name="def_s",
+        name="server_index",
     )
-
-    # Précédences
-    model.addConstrs((s[i] <= s[j] for i, j in P), name="precedences")
-
-    # Cycle time >= charge de chaque serveur
+    model.addConstrs((s[i] <= s[j] for i, j in P), name="precedence")
     model.addConstrs(
         (gp.quicksum(t[j] * x[j, k] for j in J) <= CT for k in K),
         name="bottleneck",
     )
 
     model.setObjective(CT, GRB.MINIMIZE)
-    return model, x, s, CT
-
-
-def get_placement(J, K, x):
-    """Retourne {serveur: [liste de tâches]} à partir des variables x."""
-    placement = {}
-    for k in K:
-        vnfs = [j for j in J if x[j, k].X > 0.5]
-        if vnfs:
-            placement[k] = vnfs
-    return placement
-
-
-def print_solution(model, J, K, P, t, x, s):
-    """Affiche le détail d'une solution optimale."""
-    print(f"\nCycle time optimal : {model.objVal:.1f}")
-
-    placement = get_placement(J, K, x)
-    print("\nPlacement des tâches :")
-    for k, vnfs in placement.items():
-        load = sum(t[j] for j in vnfs)
-        print(f"  Serveur {k}: tâches {vnfs} (charge {load})")
-
-    violated = [(i, j) for i, j in P if s[i].X > s[j].X]
-    if violated:
-        for i, j in violated:
-            print(f"  VIOLATION {i}->{j} (s[{i}]={s[i].X}, s[{j}]={s[j].X})")
-    else:
-        print(f"\nPrécédences : {len(P)}/{len(P)} respectées")
-
-    print(f"\nTemps de résolution : {model.Runtime:.3f}s")
-    print(f"Borne inférieure : {model.ObjBound:.1f} (gap {model.MIPGap*100:.2f}%)")
-
-    print("\nDistribution de charge :")
-    for k, vnfs in placement.items():
-        load = sum(t[j] for j in vnfs)
-        pct = load / model.objVal * 100 if model.objVal > 0 else 0
-        bar = "█" * int(pct / 10) + "░" * (10 - int(pct / 10))
-        print(f"  Serveur {k}: {bar} {load:6.1f} / {model.objVal:.1f} ({pct:5.1f}%)")
-
-
-def solve_single_instance(filepath):
-    """Charge et résout une instance. Affiche les résultats."""
-    J, K, P, t, ct_limit, order_strength = parse_alb_file(filepath)
-
-    print("=" * 70)
-    print(f"Instance : {os.path.basename(filepath)}")
-    print(f"  n={len(J)}, m={len(K)}, précédences={len(P)}")
-    print(f"  t_min={min(t.values())}, t_max={max(t.values())}, ct_limit={ct_limit}")
-    print(f"  order_strength={order_strength}")
-    print("=" * 70)
-
-    model, x, s, CT = solve_salbp(J, K, P, t)
+    model.setParam("OutputFlag", output_flag)
+    model.setParam("TimeLimit", time_limit)
     model.optimize()
-
-    print()
-    if model.status == GRB.OPTIMAL:
-        print_solution(model, J, K, P, t, x, s)
-    else:
-        print(f"Pas de solution optimale (status {model.status})")
-    print("=" * 70)
-
-
-def _instance_sort_key(filename):
-    """Tri par taille (n) puis par index."""
-    match = re.search(r"n=(\d+)_(\d+)", filename)
-    if match:
-        return int(match.group(1)), int(match.group(2))
-    return (999, 0)
+    return model, x, s, CT
 
 
 def solve_evnfp_mccormick(J, K, P, t, e, cbar, time_limit=1800, output_flag=0):
@@ -142,6 +66,7 @@ def solve_evnfp_mccormick(J, K, P, t, e, cbar, time_limit=1800, output_flag=0):
     )
     model.addConstrs((L[k] <= cbar for k in K), name="latency_bound")
 
+    # Exact McCormick envelope for z[j,k] = E[k] * x[j,k] since x is binary.
     model.addConstrs((z[j, k] >= emin * x[j, k] for j in J for k in K), name="mc1")
     model.addConstrs(
         (z[j, k] <= emax_bound * x[j, k] for j in J for k in K),
@@ -173,6 +98,16 @@ def solve_evnfp_mccormick(J, K, P, t, e, cbar, time_limit=1800, output_flag=0):
     return model, x, s, L, E, Emax
 
 
+def get_placement(J, K, x):
+    """Return placement map {server: [tasks]} from optimized x vars."""
+    placement = {}
+    for k in K:
+        tasks = [j for j in J if x[j, k].X > 0.5]
+        if tasks:
+            placement[k] = tasks
+    return placement
+
+
 def compute_server_metrics(placement, t, e):
     """Compute load Lk and weighted energy Ek for each active server."""
     metrics = {}
@@ -199,10 +134,41 @@ def _status_label(status):
     return str(status)
 
 
+def _instance_sort_key(filename):
+    match = re.search(r"n=(\d+)_(\d+)", filename)
+    if match:
+        return int(match.group(1)), int(match.group(2))
+    return 999, 999
+
+
 def _print_solution_header(title):
     print("\n" + "=" * 88)
     print(title)
     print("=" * 88)
+
+
+def print_evnfp_solution(model, J, K, t, e, x, Emax):
+    """Pretty print EVNF-P solution."""
+    placement = get_placement(J, K, x)
+    metrics = compute_server_metrics(placement, t, e)
+
+    print(f"Status: {_status_label(model.status)}")
+    if model.status in (GRB.OPTIMAL, GRB.SUBOPTIMAL, GRB.TIME_LIMIT):
+        print(f"Emax: {Emax.X:.4f}")
+        print(f"Runtime: {model.Runtime:.3f}s")
+        if model.SolCount > 0 and model.status != GRB.OPTIMAL:
+            print(f"Best bound: {model.ObjBound:.4f}")
+
+    print("Placement et metriques par serveur:")
+    for k in K:
+        tasks = placement.get(k, [])
+        if not tasks:
+            print(f"  S{k}: []")
+            continue
+        one_based = [j + 1 for j in tasks]
+        load = metrics[k]["load"]
+        energy = metrics[k]["energy"]
+        print(f"  S{k}: {one_based} | Lk={load:5.1f} | Ek={energy:7.4f}")
 
 
 def evaluate_fixed_placement(placement, t, e):
@@ -221,10 +187,11 @@ def evaluate_fixed_placement(placement, t, e):
     return loads, energies, emax
 
 
-def validate_phase3_illustrative_example():
+def validate_illustrative_example():
     """Reproduce the two target values from Section 2.15."""
     _print_solution_header("Validation numerique - instance illustrative (Section 2.15)")
 
+    # Data from the statement, indexed from 0 in code.
     t = {0: 8, 1: 10, 2: 1, 3: 9, 4: 9, 5: 3, 6: 2, 7: 1}
     e = {0: 7, 1: 3, 2: 12, 3: 10, 4: 5, 5: 14, 6: 9, 7: 4}
 
@@ -261,32 +228,6 @@ def validate_phase3_illustrative_example():
     print(f"  Emax calcule = {emax_b:.4f} (attendu 7.0000)")
 
 
-def solve_m1_phase3(J, K, P, t, time_limit=1800, output_flag=0):
-    """Solve SALBP-2 baseline model M1 (minimize CT)."""
-    model = gp.Model("M1_CT")
-
-    x = model.addVars(J, K, vtype=GRB.BINARY, name="x")
-    s = model.addVars(J, vtype=GRB.INTEGER, lb=min(K), ub=max(K), name="s")
-    CT = model.addVar(vtype=GRB.CONTINUOUS, lb=0.0, name="CT")
-
-    model.addConstrs((x.sum(j, "*") == 1 for j in J), name="assign")
-    model.addConstrs(
-        (s[j] == gp.quicksum(k * x[j, k] for k in K) for j in J),
-        name="server_index",
-    )
-    model.addConstrs((s[i] <= s[j] for i, j in P), name="precedence")
-    model.addConstrs(
-        (gp.quicksum(t[j] * x[j, k] for j in J) <= CT for k in K),
-        name="bottleneck",
-    )
-
-    model.setObjective(CT, GRB.MINIMIZE)
-    model.setParam("OutputFlag", output_flag)
-    model.setParam("TimeLimit", time_limit)
-    model.optimize()
-    return model, x, s, CT
-
-
 def run_phase3_benchmark(
     instances_dir,
     seed=42,
@@ -296,7 +237,7 @@ def run_phase3_benchmark(
     include_n100=True,
     include_n50=True,
 ):
-    """Run M1 then EVNF-P on benchmark instances and print a comparison table."""
+    """Run M1 then EVNF-P on all benchmark instances and print a comparison table."""
     files = sorted(
         [
             f
@@ -320,7 +261,7 @@ def run_phase3_benchmark(
 
         e = generate_energy_scores(J, rng)
 
-        m1_model, m1_x, _, m1_CT = solve_m1_phase3(
+        m1_model, m1_x, _, m1_CT = solve_m1(
             J,
             K,
             P,
@@ -330,7 +271,10 @@ def run_phase3_benchmark(
         )
 
         ct_star = m1_CT.X if m1_model.SolCount > 0 else None
-        cbar = cbar_factor * ct_star if ct_star is not None else ct_limit
+        if ct_star is not None:
+            cbar = cbar_factor * ct_star
+        else:
+            cbar = ct_limit
 
         ev_model, ev_x, _, _, _, ev_Emax = solve_evnfp_mccormick(
             J,
@@ -345,7 +289,15 @@ def run_phase3_benchmark(
 
         placement_m1 = get_placement(J, K, m1_x) if m1_model.SolCount > 0 else {}
         m1_metrics = compute_server_metrics(placement_m1, t, e) if placement_m1 else {}
-        m1_emax = max(v["energy"] for v in m1_metrics.values()) if m1_metrics else None
+        m1_emax = (
+            max(v["energy"] for v in m1_metrics.values()) if m1_metrics else None
+        )
+
+        ev_placement = get_placement(J, K, ev_x) if ev_model.SolCount > 0 else {}
+        ev_metrics = compute_server_metrics(ev_placement, t, e) if ev_placement else {}
+        ev_emax_check = (
+            max(v["energy"] for v in ev_metrics.values()) if ev_metrics else None
+        )
 
         row = {
             "instance": filename,
@@ -356,6 +308,7 @@ def run_phase3_benchmark(
             "cbar": cbar,
             "m1_emax": m1_emax,
             "ev_emax": (ev_Emax.X if ev_model.SolCount > 0 else None),
+            "ev_emax_check": ev_emax_check,
             "m1_runtime": m1_model.Runtime,
             "ev_runtime": ev_model.Runtime,
             "m1_status": _status_label(m1_model.status),
@@ -375,11 +328,12 @@ def run_phase3_benchmark(
         )
 
     print("-" * 88)
-    _print_phase3_summary(results)
+    _print_benchmark_summary(results)
     return results
 
 
-def _print_phase3_summary(results):
+def _print_benchmark_summary(results):
+    """Print aggregate stats for quick report integration."""
     by_n = sorted({r["n"] for r in results})
     for n in by_n:
         subset = [r for r in results if r["n"] == n]
@@ -401,122 +355,13 @@ def _print_phase3_summary(results):
         print(f"  Runtime EV moyen   : {_mean([r['ev_runtime'] for r in subset]):.3f}s")
 
 
-def run_benchmark(instances_dir):
-    """Résout toutes les instances et retourne les résultats."""
-    files = sorted(
-        [f for f in os.listdir(instances_dir)
-         if f.endswith(".alb") and "n=100" not in f],
-        key=_instance_sort_key,
-    )
-    print(f"\nBenchmark sur {len(files)} instances")
-    print("=" * 100)
-
-    results = []
-    for filename in files:
-        J, K, P, t, ct_limit, order_strength = parse_alb_file(
-            os.path.join(instances_dir, filename)
-        )
-
-        model, x, s, CT = solve_salbp(J, K, P, t)
-        model.setParam("OutputFlag", 0)
-        model.setParam("TimeLimit", 1800)  # 30 minutes
-        model.optimize()
-
-        total_time = sum(t.values())
-        optimal_CT = model.objVal if model.status in (GRB.OPTIMAL, GRB.SUBOPTIMAL) else None
-
-        results.append({
-            "instance": filename,
-            "n": len(J),
-            "m": len(K),
-            "order_strength": order_strength,
-            "num_precedences": len(P),
-            "total_time": total_time,
-            "optimal_CT": optimal_CT,
-            "runtime": model.Runtime,
-        })
-
-        if model.status == GRB.OPTIMAL:
-            status = "OK"
-        elif model.status == GRB.TIME_LIMIT:
-            status = "TIMEOUT"
-        else:
-            status = "FAIL"
-        ct_str = f"{optimal_CT:.0f}" if optimal_CT else "N/A"
-        print(
-            f"  {filename:<25} n={len(J):3d}  m={len(K):2d}  "
-            f"OS={order_strength:.3f}  prec={len(P):2d}  "
-            f"total={total_time:5d}  CT={ct_str:>4s}  "
-            f"time={model.Runtime:.3f}s  [{status}]"
-        )
-
-    print("=" * 100)
-    return results
-
-
-def print_stats(results):
-    """Affiche les statistiques agrégées par taille."""
-    sizes = sorted({r["n"] for r in results})
-
-    for n in sizes:
-        subset = [r for r in results if r["n"] == n]
-        runtimes = [r["runtime"] for r in subset]
-        ct_vals = [r["optimal_CT"] for r in subset if r["optimal_CT"]]
-
-        print(f"\nn={n} ({len(subset)} instances) :")
-        print(f"  OS moyen        : {_mean([r['order_strength'] for r in subset]):.3f}")
-        print(f"  Précédences moy : {_mean([r['num_precedences'] for r in subset]):.1f}")
-        print(f"  Total time moy  : {_mean([r['total_time'] for r in subset]):.0f}")
-        if ct_vals:
-            print(f"  CT optimal moy  : {_mean(ct_vals):.0f}")
-        print(f"  Runtime moyen   : {_mean(runtimes):.4f}s")
-
-
-def save_runtime_plot(results, output_path="resol_time_analysis.png"):
-    """Génère et sauvegarde le graphique temps de résolution."""
-    import matplotlib.pyplot as plt
-
-    try:
-        plt.style.use("seaborn-v0_8-whitegrid")
-    except Exception:
-        pass
-
-    sizes = sorted({r["n"] for r in results})
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
-
-    for n in sizes:
-        subset = [r for r in results if r["n"] == n]
-        runtimes = [r["runtime"] for r in subset]
-
-        ax1.scatter([n] * len(subset), runtimes, s=100, label=f"n={n}",
-                    alpha=0.7, edgecolors="black")
-        ax2.scatter([r["order_strength"] for r in subset], runtimes, s=100,
-                    label=f"n={n}", alpha=0.7, edgecolors="black")
-
-    ax1.set_xlabel("Nombre de tâches (n)")
-    ax1.set_ylabel("Temps de résolution (s)")
-    ax1.set_title("Temps vs taille")
-    ax1.set_xticks(sizes)
-    ax1.legend()
-
-    ax2.set_xlabel("Order Strength")
-    ax2.set_ylabel("Temps de résolution (s)")
-    ax2.set_title("Temps vs Order Strength")
-    ax2.legend()
-
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=300)
-    print(f"\nGraphique sauvegardé : {output_path}")
-
-
 def _mean(values):
-    return sum(values) / len(values) if values else 0
+    return sum(values) / len(values) if values else 0.0
 
 
 def main():
-    parser = argparse.ArgumentParser(description="SALBP + Phase 3 EVNF-P")
+    parser = argparse.ArgumentParser(description="Phase 3 EVNF-P")
     parser.add_argument("--instances-dir", default="./Instances")
-    parser.add_argument("--run-phase3", action="store_true")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--cbar-factor", type=float, default=1.05)
     parser.add_argument("--time-limit-m1", type=int, default=1800)
@@ -526,31 +371,22 @@ def main():
     parser.add_argument("--skip-benchmark", action="store_true")
     args = parser.parse_args()
 
-    if args.run_phase3:
-        print("PHASE 3 - EVNF-P (McCormick exact MILP)")
-        print("Regle de generation des scores energetiques: uniforme {1..15}, seed=42")
-        validate_phase3_illustrative_example()
+    print("PHASE 3 - EVNF-P (McCormick exact MILP)")
+    print("Regle de generation des scores energetiques: uniforme {1..15}, seed=42")
 
-        if not args.skip_benchmark:
-            exclude_large = args.exclude_n50_n100 or args.exclude_n100
-            run_phase3_benchmark(
-                instances_dir=args.instances_dir,
-                seed=args.seed,
-                cbar_factor=args.cbar_factor,
-                time_limit_m1=args.time_limit_m1,
-                time_limit_evnf=args.time_limit_ev,
-                include_n100=not exclude_large,
-                include_n50=not args.exclude_n50_n100,
-            )
-        return
+    validate_illustrative_example()
 
-    solve_single_instance("./Instances/instance_n=20_1.alb")
-    results = run_benchmark(args.instances_dir)
-    print_stats(results)
-    try:
-        save_runtime_plot(results)
-    except ImportError:
-        print("matplotlib non installé, graphique ignoré.")
+    if not args.skip_benchmark:
+        exclude_large = args.exclude_n50_n100 or args.exclude_n100
+        run_phase3_benchmark(
+            instances_dir=args.instances_dir,
+            seed=args.seed,
+            cbar_factor=args.cbar_factor,
+            time_limit_m1=args.time_limit_m1,
+            time_limit_evnf=args.time_limit_ev,
+            include_n100=not exclude_large,
+            include_n50=not args.exclude_n50_n100,
+        )
 
 
 if __name__ == "__main__":
