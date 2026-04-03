@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2025.9.16)  3 APR 2026 09:14
+This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2025.9.16)  3 APR 2026 09:15
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -181,7 +181,8 @@ Package: booktabs 2020/01/12 v1.61803398 Publication quality tables
 File: l3backend-pdftex.def 2024-05-08 L3 backend support: PDF output (pdfTeX)
 \l__color_backend_stack_int=\count295
 \l__pdf_internal_box=\box54
-) (./Projet.aux)
+)
+No file Projet.aux.
 \openout1 = `Projet.aux'.
 
 LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 10.
@@ -200,7 +201,7 @@ LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 10.
 LaTeX Font Info:    ... okay on input line 10.
 LaTeX Info: Redefining \degres on input line 10.
 LaTeX Info: Redefining \up on input line 10.
- (/usr/local/texlive/2025/texmf-dist/tex/context/base/mkii/supp-pdf.mkii
+(/usr/local/texlive/2025/texmf-dist/tex/context/base/mkii/supp-pdf.mkii
 [Loading MPS to PDF converter (version 2006.09.02).]
 \scratchcounter=\count296
 \scratchdimen=\dimen176
@@ -404,10 +405,10 @@ LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
 
  ) 
 Here is how much of TeX's memory you used:
- 4889 strings out of 473190
- 78161 string characters out of 5715800
- 507526 words of memory out of 5000000
- 28083 multiletter control sequences out of 15000+600000
+ 4886 strings out of 473190
+ 78116 string characters out of 5715800
+ 507535 words of memory out of 5000000
+ 28082 multiletter control sequences out of 15000+600000
  580391 words of font info for 87 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
  57i,17n,65p,519b,428s stack positions out of 10000i,1000n,20000p,200000b,200000s
