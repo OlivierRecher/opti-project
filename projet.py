@@ -2,6 +2,7 @@ import argparse
 import os
 import random
 import re
+import math
 
 import gurobipy as gp
 from gurobipy import GRB
@@ -72,6 +73,7 @@ def print_solution(model, J, K, P, t, x, s):
 
     print(f"\nTemps de résolution : {model.Runtime:.3f}s")
     print(f"Borne inférieure : {model.ObjBound:.1f} (gap {model.MIPGap*100:.2f}%)")
+    print(f"Nœuds Branch & Bound explorés : {int(model.NodeCount)}")
 
     print("\nDistribution de charge :")
     for k, vnfs in placement.items():
@@ -424,6 +426,14 @@ def run_benchmark(instances_dir):
 
         total_time = sum(t.values())
         optimal_CT = model.objVal if model.status in (GRB.OPTIMAL, GRB.SUBOPTIMAL) else None
+        
+        # Calcul robuste du gap
+        gap_opt = None
+        if model.status == GRB.OPTIMAL:
+            gap_opt = 0.0
+        elif model.MIPGap is not None and model.MIPGap < float('inf'):
+            if not math.isnan(model.MIPGap):
+                gap_opt = model.MIPGap * 100
 
         results.append({
             "instance": filename,
@@ -434,6 +444,9 @@ def run_benchmark(instances_dir):
             "total_time": total_time,
             "optimal_CT": optimal_CT,
             "runtime": model.Runtime,
+            "lower_bound": model.ObjBound,
+            "gap_optimality": gap_opt,
+            "node_count": int(model.NodeCount),
         })
 
         if model.status == GRB.OPTIMAL:
@@ -443,11 +456,12 @@ def run_benchmark(instances_dir):
         else:
             status = "FAIL"
         ct_str = f"{optimal_CT:.0f}" if optimal_CT else "N/A"
+        gap = results[-1]['gap_optimality']
+        gap_str = f"{gap:.2f}%" if gap is not None else "N/A"
         print(
             f"  {filename:<25} n={len(J):3d}  m={len(K):2d}  "
-            f"OS={order_strength:.3f}  prec={len(P):2d}  "
-            f"total={total_time:5d}  CT={ct_str:>4s}  "
-            f"time={model.Runtime:.3f}s  [{status}]"
+            f"os={order_strength:.3f}  CT={ct_str:>4s}  "
+            f"time={model.Runtime:.3f}s  nodes={int(model.NodeCount):>6d}  gap={gap_str:>7s}  [{status}]"
         )
 
     print("=" * 100)
@@ -462,14 +476,19 @@ def print_stats(results):
         subset = [r for r in results if r["n"] == n]
         runtimes = [r["runtime"] for r in subset]
         ct_vals = [r["optimal_CT"] for r in subset if r["optimal_CT"]]
+        gaps = [r["gap_optimality"] for r in subset if r["gap_optimality"] is not None]
+        nodes = [r["node_count"] for r in subset if r["node_count"]]
 
         print(f"\nn={n} ({len(subset)} instances) :")
         print(f"  OS moyen        : {_mean([r['order_strength'] for r in subset]):.3f}")
         print(f"  Précédences moy : {_mean([r['num_precedences'] for r in subset]):.1f}")
-        print(f"  Total time moy  : {_mean([r['total_time'] for r in subset]):.0f}")
         if ct_vals:
             print(f"  CT optimal moy  : {_mean(ct_vals):.0f}")
         print(f"  Runtime moyen   : {_mean(runtimes):.4f}s")
+        if gaps:
+            print(f"  Gap moyen (%)   : {_mean(gaps):.2f}%")
+        if nodes:
+            print(f"  Nœuds B&B moyen : {_mean(nodes):.0f}")
 
 
 def save_runtime_plot(results, output_path="resol_time_analysis.png"):

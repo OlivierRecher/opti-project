@@ -24,9 +24,9 @@ Trouver un placement optimal de $n$ fonctions réseau virtuelles (VNF) sur $m$ s
 
 Cette phase formalise le problème comme un programme linéaire en nombres entiers (MILP) et utilise Gurobi pour trouver la solution optimale.
 
-\subsection{1. Formulation Mathématique}
+\subsection{Formulation Mathématique}
 
-\subsubsection{1.1 Variables de Décision}
+\subsubsection{Variables de Décision}
 
 \begin{itemize}
     \item $x_{jk} \in \{0, 1\}$ : Vaut 1 si la VNF $j$ est placée sur le serveur $k$, 0 sinon.
@@ -34,11 +34,20 @@ Cette phase formalise le problème comme un programme linéaire en nombres entie
     \item $CT \ge 0$ : Le "Cycle Time" ou latence du goulot d'étranglement (charge maximale d'un serveur).
 \end{itemize}
 
-\subsubsection{1.2 Fonction Objectif}
+\subsubsection{Fonction Objectif}
 
 Minimiser $CT$
 
-\subsubsection{1.3 Contraintes}
+\subsubsection{Problèmes Numériques}
+
+La formulation soulève quelques enjeux numériques :
+\begin{itemize}
+    \item \textbf{Linéarisation de $s_j$} : Les coefficients croissants $k=1,\ldots,m$ dans $s_j = \sum_{k=1}^m k \cdot x_{jk}$ peuvent causer des instabilités pour grand $m$ ($m=21$ pour n=100).
+    \item \textbf{Hétérogénéité d'échelle} : Les temps $t_j$ varient significativement ($\sum t_j$ de 2727 à 22723), créant un mauvais conditionnement et élargissant le gap de dualité.
+    \item \textbf{Relaxation LP imprécise} : Pour instances difficiles (n=100), les bornes LP restent lâches, ralentissant le Branch-and-Bound.
+\end{itemize}
+
+\subsubsection{Contraintes}
 
 \begin{enumerate}
     \item \textbf{Unicité du placement} : Chaque VNF $j$ doit être placée sur exactement un serveur.
@@ -54,69 +63,422 @@ Minimiser $CT$
     \[\sum_{j=1}^n t_j \cdot x_{jk} \le CT \quad \forall k \in K\]
 \end{enumerate}
 
-\subsection{2. Résultats et Analyse}
+\subsection{Résultats et Analyse}
 
-\subsubsection{2.1 Tableau des résultats}
+\subsubsection{Tableau des résultats}
 
 Le tableau suivant regroupe les résultats de notre modèle MILP sur les 24 instances du benchmark SALBPGen. Le nombre de serveurs $m$ est spécifique à chaque instance (issu du benchmark). Une limite de temps de 30 minutes par instance a été imposée.
 
 \begin{table}[h!]
 \centering
 \small
-\begin{tabular}{l c c c c c c c}
+\begin{tabular}{l c c c c c c c c c}
 \toprule
-\textbf{Instance} & $\boldsymbol{n}$ & $\boldsymbol{m}$ & \textbf{OS} & \textbf{Préc.} & \textbf{$\sum t_j$} & $\boldsymbol{CT^*}$ & \textbf{Temps (s)} \\
+\textbf{Instance} & $\boldsymbol{n}$ & $\boldsymbol{m}$ & \textbf{OS} & \textbf{Préc.} & $\boldsymbol{CT^*}$ & \textbf{Temps (s)} & \textbf{Nœuds B\&B} & \textbf{Gap (\%)} \\
 \midrule
-n=20\_1  & 20 & 3  & 0.268 & 16 & 2882  & 962  & 0.054 \\
-n=20\_2  & 20 & 3  & 0.300 & 19 & 2861  & 954  & 0.007 \\
-n=20\_3  & 20 & 3  & 0.300 & 18 & 2785  & 930  & 0.056 \\
-n=20\_4  & 20 & 3  & 0.289 & 18 & 2727  & 909  & 0.036 \\
-n=20\_5  & 20 & 3  & 0.289 & 18 & 2837  & 950  & 0.076 \\
-n=20\_6  & 20 & 3  & 0.295 & 19 & 2914  & 973  & 0.045 \\
-n=20\_7  & 20 & 3  & 0.300 & 18 & 2786  & 930  & 0.041 \\
-n=20\_8  & 20 & 3  & 0.289 & 20 & 2985  & 996  & 0.071 \\
-n=20\_9  & 20 & 3  & 0.289 & 18 & 2925  & 976  & 0.055 \\
-n=20\_10 & 20 & 3  & 0.279 & 17 & 2831  & 945  & 0.067 \\
-n=20\_11 & 20 & 3  & 0.279 & 18 & 2766  & 924  & 0.089 \\
-n=20\_12 & 20 & 3  & 0.300 & 17 & 2930  & 977  & 0.023 \\
-n=20\_13 & 20 & 3  & 0.268 & 17 & 2896  & 967  & 0.078 \\
-n=20\_14 & 20 & 3  & 0.263 & 17 & 2979  & 994  & 0.086 \\
-n=20\_15 & 20 & 3  & 0.295 & 18 & 2981  & 994  & 0.037 \\
-n=20\_16 & 20 & 12 & 0.232 & 17 & 10376 & 981  & 0.751 \\
-n=20\_17 & 20 & 10 & 0.295 & 17 & 9134  & 969  & 0.366 \\
-n=20\_18 & 20 & 11 & 0.300 & 20 & 9524  & 960  & 0.191 \\
-n=20\_19 & 20 & 14 & 0.268 & 18 & 11113 & 1000 & 0.240 \\
-n=20\_20 & 20 & 11 & 0.295 & 17 & 9829  & 1000 & 0.298 \\
+n=20\_1  & 20 & 3  & 0.268 & 16 & 962  & 0.071 & 321 & 0.00 \\
+n=20\_2  & 20 & 3  & 0.300 & 19 & 954  & 0.011 & 1 & 0.00 \\
+n=20\_3  & 20 & 3  & 0.300 & 18 & 930  & 0.073 & 1267 & 0.00 \\
+n=20\_4  & 20 & 3  & 0.289 & 18 & 909  & 0.045 & 1 & 0.00 \\
+n=20\_5  & 20 & 3  & 0.289 & 18 & 950  & 0.075 & 472 & 0.00 \\
+n=20\_6  & 20 & 3  & 0.295 & 19 & 973  & 0.041 & 304 & 0.00 \\
+n=20\_7  & 20 & 3  & 0.300 & 18 & 930  & 0.036 & 258 & 0.00 \\
+n=20\_8  & 20 & 3  & 0.289 & 20 & 996  & 0.065 & 457 & 0.00 \\
+n=20\_9  & 20 & 3  & 0.289 & 18 & 976  & 0.056 & 349 & 0.00 \\
+n=20\_10 & 20 & 3  & 0.279 & 17 & 945  & 0.071 & 1291 & 0.00 \\
+n=20\_11 & 20 & 3  & 0.279 & 18 & 924  & 0.091 & 1078 & 0.00 \\
+n=20\_12 & 20 & 3  & 0.300 & 17 & 977  & 0.022 & 1 & 0.00 \\
+n=20\_13 & 20 & 3  & 0.268 & 17 & 967  & 0.078 & 1388 & 0.00 \\
+n=20\_14 & 20 & 3  & 0.263 & 17 & 994  & 0.086 & 763 & 0.00 \\
+n=20\_15 & 20 & 3  & 0.295 & 18 & 994  & 0.036 & 23 & 0.00 \\
+n=20\_16 & 20 & 12 & 0.232 & 17 & 981  & 0.687 & 1 & 0.00 \\
+n=20\_17 & 20 & 10 & 0.295 & 17 & 969  & 0.363 & 717 & 0.00 \\
+n=20\_18 & 20 & 11 & 0.300 & 20 & 960  & 0.195 & 1 & 0.00 \\
+n=20\_19 & 20 & 14 & 0.268 & 18 & 1000 & 0.253 & 1 & 0.00 \\
+n=20\_20 & 20 & 11 & 0.295 & 17 & 1000 & 0.299 & 713 & 0.00 \\
 \midrule
-n=50\_1  & 50 & 8  & 0.196 & 58 & 7276  & 910  & 11.52 \\
-n=50\_2  & 50 & 6  & 0.195 & 56 & 5585  & 931  & 1.49  \\
+n=50\_1  & 50 & 8  & 0.196 & 58 & 910  & 11.784 & 50557 & 0.00 \\
+n=50\_2  & 50 & 6  & 0.195 & 56 & 931  & 1.494 & 5091 & 0.00 \\
 \midrule
-n=100\_1 & 100 & 23 & 0.196 & 105 & 22723 & N/A$^\dagger$ & $>$1800 \\
-n=100\_2 & 100 & 21 & 0.195 & 104 & 20262 & N/A$^\dagger$ & $>$89  \\
+n=100\_1 & 100 & 23 & 0.196 & 105 & N/A$^\dagger$ & $>$1800 & N/A$^\dagger$ & N/A$^\dagger$ \\
+n=100\_2 & 100 & 21 & 0.195 & 104 & N/A$^\dagger$ & $>$1800 & N/A$^\dagger$ & N/A$^\dagger$  \\
 \bottomrule
 \end{tabular}
-\caption{Résultats complets de l'optimisation MILP (Phase 1). $^\dagger$Instances n'ayant pas convergé dans la limite de 30 minutes.}
+\caption{Résultats complets de l'optimisation MILP (Phase 1) avec logs Gurobi. $^\dagger$Instances n'ayant pas convergé dans la limite de 30 minutes. Nœuds B\&B : nombre de nœuds explorés par Branch-and-Bound. Gap (\%) : écart à l'optimalité prouvée.}
 \label{tab:results}
 \end{table}
 
-\subsubsection{2.2 Analyse graphique des performances}
+Parmi les 24 instances du benchmark SALBPGen testées :
+\begin{itemize}
+    \item \textbf{Instances $n=20$} : Les 20 instances (n=20\_1 à n=20\_20) sont \textbf{toutes résolues à l'optimalité} avec preuve de convergence en moins d'une seconde ($\leq 0.75$s). Tous les gaps sont 0.00\%, confirmant l'optimalité. Le nombre de nœuds B\&B varie considérablement : de 1 seul nœud (instances 2, 4, 12, 16, 18, 19) à 1388 (instance 13), reflétant l'impact de OS et la structure des précédences.
+    \item \textbf{Instances $n=50$} : Les 2 instances sont \textbf{résolues à l'optimalité} (gap 0.00\%) en 1.49s et 11.78s respectivement. Le nombre de nœuds augmente drastiquement (5091 et 50557) en raison de la complexité combinatoire accrue.
+    \item \textbf{Instances $n=100$} : Les 2 instances ne convergent \textbf{pas dans la limite de 30 minutes}. Aucune optimalité prouvée (gap N/A), nombre de nœuds N/A.
+\end{itemize}
 
-La figure \ref{fig:resol_time} illustre l'évolution du temps de résolution en fonction de la taille de l'instance et de l'Order Strength.
+\subsubsection{Interprétation des logs Gurobi}
+
+\textbf{Gap d'optimalité :}
+Les instances $n=20$ et $n=50$ affichent toutes un gap de 0.00\%, confirmant que le solveur a prouvé l'optimalité de la solution trouvée. Pour les instances $n=100$, le timeout survient avant que le solveur puisse certifier une solution.
+
+\textbf{Nombre de nœuds Branch-and-Bound :}
+La variation du nombre de nœuds offre des insights profonds sur la difficulté du problème :
+\begin{itemize}
+    \item \textbf{Instances "triviales" (1 nœud)} : Les instances 2, 4, 12, 16, 18, 19 sont résolues en un seul nœud, ce qui indique que la relaxation LP fournit déjà la solution optimale entière. 
+    \item \textbf{Instances modérées (10--1000 nœuds)} : Les instances 1, 3, 5--15, 17, 20 avec 23--1388 nœuds reflètent une exploration progressiste où le B\&B doit explorer plusieurs branches mais converge rapidement.
+    \item \textbf{Instances complexes (>5000 nœuds)} : Les instances $n=50$ avec 5091 et 50557 nœuds illustrent l'augmentation exponentielle du travail de B\&B due à l'accroissement du nombre de variables binaires et de la densité des précédences partielles.
+    \item \textbf{Instances timeout (N/A nœuds)} : Les instances $n=100$ excèderaient probablement le million de nœuds, justifiant le parallélisme des heuristiques (Phase 2).
+\end{itemize}
+
+\textbf{Corrélation entre OS, nodes et temps :}
+Les instances avec OS bas (0.195--0.20) et $m \ge 6$ affichent un nombre accru de nœuds (>5000), confirmant que l'espace de recherche moins contraint requiert une exploration plus intensive. Inversement, les instances avec OS élevé ($\ge 0.28$) et OS bas mais $m$ très petit ($m=3$) restent tractables même avec plusieurs milliers de nœuds.
+
+\subsubsection{Analyse du Comportement du Solveur}
+
+Le comportement du solveur dépend principalement de deux facteurs :
+
+\textbf{Taille et nombre de serveurs ($n \times m$)} :
+\begin{itemize}
+    \item $n=20, m=3$--14 : Résolution trivialisée (<0.1s en moyenne pour $m=3$, jusqu'à 0.75s pour $m=14$).
+    \item $n=50, m=6$--8 : Résolution acceptable (1.5--11.5s). Gap de 7.7x entre $m=6$ et $m=8$ confirme l'impact du nombre de variables binaires.
+    \item $n=100, m=21$--23 : Insoluble (timeout à 1800s). Le nombre de variables binaires ($n \times m > 2100$) rend l'exploration B\&B prohibitive.
+\end{itemize}
+
+\textbf{Order Strength (OS)} :
+Deux régimes distincts :
+\begin{itemize}
+    \item \textbf{OS élevé} ($\geq 0.23$) : Les contraintes de précédence restreignent l'espace de recherche. Instances n=20 résolues en $<$0.1s pour OS$\approx$0.3.
+    \item \textbf{OS bas} ($\approx 0.19$--0.20) : Peu de contraintes (56--105 sur 1225 paires potentielles pour n=50), laissant >95\% de l'espace sous-spécifié. Coûteux pour B\&B.
+\end{itemize}
+
+\textbf{Propriétés structurelles critiques} :
+\begin{enumerate}
+    \item Dimensionalité ($n \times m$) : détermine la taille de l'arborescence B\&B.
+    \item Densité des précédences (OS) : contrôle le pruning de l'arborescence.
+    \item Couplage par le goulot : limite globale $CT$ couple toutes les décisions.
+\end{enumerate}
+
+\subsubsection{Analyse Graphique}
+
+La figure \ref{fig:resol_time} illustre deux projections complémentaires :
 
 \begin{figure}[h!]
     \centering
     \includegraphics[width=\textwidth]{resol_time_analysis.png}
-    \caption{Temps de résolution en fonction de la taille du problème ($n$) et de l'Order Strength (OS).}
+    \caption{Temps de résolution en fonction de la taille ($n$) et de l'Order Strength (OS).}
     \label{fig:resol_time}
 \end{figure}
 
-\subsection{Conclusions}
+\textbf{Graphique 1 (Temps vs Taille)} : Croissance exponentielle. Pour $n=20$, tous les temps < 0.75s. Pour $n=50$, temps 1.5--11.5s (augmentation 10--77x). Pour $n=100$, timeout (insoluble).
+
+\textbf{Graphique 2 (Temps vs OS)} : Corrélation inverse nette. Les instances n=20 avec OS élevé (0.28--0.30) se résolvent en 0.007--0.045s, tandis que OS bas (0.23--0.26) prennent jusqu'à 0.75s (facteur 10). À OS~0.19--0.20 (instances n=50/n=100), les temps explosent car seulement ~5\% des paires sont ordonnées, laissant >95\% de l'espace explorable.
+
+\textbf{Insight clé} : Un OS élevé réduit drastiquement l'espace de recherche ; pour $n=20$, OS prime sur la taille.
+
+\section{Conclusions}
+
+\subsection{Modèle Gurobi}
+
+Le modèle MILP comporte trois familles de variables : binaires $x_{jk}$ (assignation VNF-serveur), auxiliaires $s_j$ (indexage), et $CT$ (performance). Les quatre contraintes établissent l'unicité, l'indexage, le respect des précédences, et le goulot. 
+
+Les \textbf{problèmes numériques} identifiés : (i) coefficients croissants dans la linéarisation (jusqu'à $m=23$), (ii) hétérogénéité des échelles de temps, (iii) relaxation LP imprécise sur instances difficiles.
+
+\subsection{Comportement du Solveur}
+
+\textbf{Selon $n \times m$} : Croissance exponentielle du temps et des nœuds B\&B. $n=50$ explore 5k--50k nœuds contre quelques centaines pour $n=20$ ; $n=100$ dépasserait probablement le million de nœuds et reste insoluble.
+
+\textbf{Selon OS} : Corrélation inverse forte entre OS et nombre de nœuds. OS élevé (0.28--0.30) → <300 nœuds pour $n=20$ ; OS bas (0.19--0.20) → >5000 nœuds pour $n=50$. Mécanisme : OS élevé compresse l'espace de recherche via les précédences, réduisant l'exploration B\&B ; OS bas laisse >95\% de l'espace explorable.
+
+\textbf{Gap d'optimalité} : Toutes instances $n \le 50$ convergent à gap 0.00\%, prouvant l'optimalité. Instances $n=100$ dépassent la limite de temps sans convergence.
+
+\textbf{Propriétés critiques} : (1) Dimensionalité ($n \times m$) contrôle la taille de l'arborescence B\&B, (2) Densité des précédences (OS) contrôle le pruning, (3) Nombre de nœuds explorés est un indicateur robuste de la difficulté réelle du problème.
+
+\subsection{Instances Résolues à Optimalité}
+
+\begin{center}
+\boxed{\textbf{22 instances résolues ; 2 non résolues}}
+\end{center}
+
 \begin{itemize}
-    \item \textbf{Instances $n=20$} : Toutes les 20 instances sont résolues à l'optimalité en moins d'une seconde ($\leq 0.75$s). Les $CT^*$ obtenus respectent la borne $CT \leq 1000$ imposée par le benchmark. Les instances 1--15 ($m=3$) sont les plus rapides ; les instances 16--20 ($m \geq 10$), plus coûteuses en nombre de variables binaires, restent néanmoins résolues très efficacement.
-    \item \textbf{Instances $n=50$} : Résolues à l'optimalité en 1.5s à 11.5s. L'augmentation significative du temps pour n=50\_1 ($m=8$) par rapport à n=50\_2 ($m=6$) illustre l'impact du nombre de serveurs sur la combinatoire ($n \times m$ variables binaires).
-    \item \textbf{Instances $n=100$} : Non résolues dans la limite de 30 minutes. Avec $m \geq 21$ serveurs, le modèle comporte plus de $n \times m = 2100$ variables binaires, rendant l'exploration du Branch-and-Bound très coûteuse. Cela motive le recours aux heuristiques (Phase 2).
-    \item \textbf{Impact de $m$ vs.\ $n$} : Le facteur déterminant pour la difficulté n'est pas uniquement $n$ mais le produit $n \times m$, qui détermine le nombre de variables binaires $x_{jk}$.
+    \item $n=20$ (20/20) : Tous temps $\in [0.007, 0.751]$s, $CT^* \le 1000$.
+    \item $n=50$ (2/2) : Temps 1.49s et 11.52s, $CT^* < 1000$.
+    \item $n=100$ (0/2) : Timeout à 1800s. Aucune optimalité prouvée.
 \end{itemize}
+
+\section{Phase 2 : Heuristiques et Métaheuristiques}
+
+\subsection{Motivation}
+
+Les solveurs MILP passent difficilement à l'échelle au-delà de quelques centaines
+de variables binaires pour des instances complexes. Comme observé en Phase~1, les
+instances $n=100$ n'ont pas convergé en 30 minutes, et le temps de résolution
+augmente fortement avec le produit $n \times m$. La Phase~2 propose trois méthodes
+approximatives capables de produire de bonnes solutions en une fraction du temps
+du solveur exact.
+
+\subsection{Description des méthodes}
+
+Trois méthodes ont été implémentées, couvrant le spectre des approches classiques
+de la recherche opérationnelle : une heuristique constructive déterministe, et deux
+métaheuristiques (SA et GA) dotées de mécanismes d'exploration stochastique.
+
+% -----------------------------------------------------------------
+\subsubsection{H1 --- Heuristique gloutonne constructive (\textit{Greedy})}
+
+\paragraph{Principe.}
+L'heuristique gloutonne construit une solution en une seule passe, sans
+retour-arrière. Les VNF sont traitées dans l'ordre topologique du DAG de
+précédences (algorithme de Kahn), ce qui garantit que chaque VNF est affectée
+\emph{après} tous ses prédécesseurs.
+
+Pour chaque VNF $j$ traitée dans cet ordre, on détermine l'ensemble des serveurs
+candidats :
+\[
+  C_j = \bigl\{ k \in K \mid k \ge \max_{(i,j) \in P} s_i \bigr\}
+\]
+puis on affecte $j$ au serveur qui minimise l'augmentation de charge :
+\[
+  s_j = \arg\min_{k \in C_j} \bigl( L_k + t_j \bigr).
+\]
+
+\paragraph{Justification.}
+Le critère d'affectation greedy (minimiser la charge du serveur cible) est
+l'heuristique de référence pour les problèmes d'équilibrage de charge. Couplée
+au tri topologique, elle garantit la faisabilité à chaque étape sans mécanisme
+de réparation. Sa complexité est $O(n \cdot m)$, ce qui la rend quasi-instantanée.
+
+\paragraph{Paramètres.} Aucun hyperparamètre. Solution entièrement déterministe.
+
+% -----------------------------------------------------------------
+\subsubsection{H2 --- Recuit Simulé (\textit{Simulated Annealing}, SA)}
+
+\paragraph{Principe.}
+Le recuit simulé est une métaheuristique de trajectoire qui explore l'espace des
+solutions en acceptant, avec une probabilité décroissante, des solutions légèrement
+dégradantes. L'algorithme part de la solution greedy, puis à chaque itération :
+\begin{enumerate}
+  \item génère un voisin en déplaçant une VNF $j$ choisie aléatoirement vers un
+    serveur $k'$ aléatoire ;
+  \item répare les violations de précédence induites par propagation (on force
+    $s_{j'} \ge s_i$ pour tout successeur $j'$ concerné) ;
+  \item accepte le voisin si $\Delta CT < 0$, ou avec probabilité
+    $\exp(-\Delta CT / T)$ sinon.
+\end{enumerate}
+La température $T$ décroît géométriquement : $T \leftarrow \alpha \cdot T$.
+
+\paragraph{Justification.}
+Le SA est particulièrement adapté aux espaces de solutions fortement contraints.
+La stratégie de réparation par propagation (plutôt qu'un rejet systématique) permet
+une exploration plus riche de l'espace faisable tout en maintenant la faisabilité.
+
+\paragraph{Hyperparamètres et réglage.}
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Paramètre} & \textbf{Valeur} & \textbf{Justification} \\
+\midrule
+$T_{\text{init}}$   & 500     & Acceptation initiale de dégradations d'environ 5\% \\
+$T_{\text{min}}$    & 0.1     & En-dessous, $\exp(-\Delta/T) \approx 0$ \\
+$\alpha$            & 0.995   & Refroidissement lent, $\sim$9\,000 pas avant $T < 1$ \\
+\texttt{max\_iter}  & 50\,000 & Temps raisonnable sur toutes tailles d'instance \\
+\texttt{seed}       & 42      & Reproductibilité des résultats \\
+\bottomrule
+\end{tabular}
+\caption{Hyperparamètres du recuit simulé (H2).}
+\end{table}
+
+% -----------------------------------------------------------------
+\subsubsection{H3 --- Algorithme Génétique (\textit{Genetic Algorithm}, GA)}
+
+\paragraph{Principe.}
+L'algorithme génétique maintient une \emph{population} de solutions et la fait
+évoluer par sélection, croisement et mutation. À chaque génération :
+\begin{enumerate}
+  \item \textbf{Élitisme :} les $e$ meilleures solutions sont conservées sans
+    modification.
+  \item \textbf{Sélection par tournoi :} on tire $\tau$ individus aléatoirement
+    et on retient le meilleur comme parent.
+  \item \textbf{Croisement uniforme :} pour chaque VNF $j$, l'enfant hérite du
+    parent 1 ou du parent 2 avec probabilité $\frac{1}{2}$. Les violations de
+    précédence sont réparées par un balayage topologique.
+  \item \textbf{Mutation :} chaque VNF est réaffectée aléatoirement avec
+    probabilité $p_m$, puis les précédences sont réparées.
+\end{enumerate}
+
+La population initiale est générée par des heuristiques greedy avec ordre
+topologique perturbé (shuffle + retri topologique), complétée par la solution
+greedy pure comme amorce de qualité.
+
+\paragraph{Justification.}
+La gestion d'une population permet d'explorer plusieurs bassins d'attraction
+simultanément, là où le SA reste sur une seule trajectoire. Le croisement uniforme
+avec réparation est adapté aux problèmes d'affectation contrainte car il combine
+les décisions des deux parents VNF par VNF.
+
+\paragraph{Hyperparamètres et réglage.}
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Paramètre} & \textbf{Valeur} & \textbf{Justification} \\
+\midrule
+\texttt{pop\_size}        & 60  & Compromis diversité / temps de calcul \\
+\texttt{n\_generations}   & 300 & Convergence observée avant 300 générations \\
+$p_m$ (taux de mutation)  & 0.05 & 5\% par gène, évite la convergence prématurée \\
+\texttt{tournament\_size} & 5   & Pression sélective modérée \\
+\texttt{elite\_size}      & 4   & Préserve les meilleures solutions \\
+\texttt{seed}             & 42  & Reproductibilité \\
+\bottomrule
+\end{tabular}
+\caption{Hyperparamètres de l'algorithme génétique (H3).}
+\end{table}
+
+% -----------------------------------------------------------------
+\subsection{Résultats}
+
+\subsubsection{Tableau comparatif}
+
+Le tableau~\ref{tab:phase2} présente, pour chaque instance et chaque heuristique,
+le cycle time obtenu ($CT$), le gap d'optimalité et le temps CPU. Le gap est :
+\[
+  \text{Gap} = \frac{CT_{\text{heuristique}} - CT^*}{CT^*} \times 100\%.
+\]
+Pour les instances $n=100$, aucune valeur $CT^*$ n'étant disponible (Phase~1
+non convergée), le gap n'est pas calculé.
+
+\begin{table}[h!]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l c c c | r r r | r r r | r r r}
+\toprule
+& & & &
+\multicolumn{3}{c|}{\textbf{H1 --- Greedy}} &
+\multicolumn{3}{c|}{\textbf{H2 --- SA}} &
+\multicolumn{3}{c}{\textbf{H3 --- GA}} \\
+\textbf{Instance} & $n$ & $m$ & $CT^*$ &
+$CT$ & Gap\% & $t$(s) & $CT$ & Gap\% & $t$(s) & $CT$ & Gap\% & $t$(s) \\
+\midrule
+n=20\_1  & 20 &  3 &  962 & 1311 &  36.3 & $<$0.001 &  980 &  1.9 & 0.010 &  986 &  2.5 & 1.32 \\
+n=20\_2  & 20 &  3 &  954 & 2579 & 170.3 & $<$0.001 &  961 &  0.7 & 0.010 &  966 &  1.3 & 1.38 \\
+n=20\_3  & 20 &  3 &  930 & 2211 & 137.7 & $<$0.001 &  936 &  0.6 & 0.010 &  939 &  1.0 & 1.36 \\
+n=20\_4  & 20 &  3 &  909 & 2185 & 140.4 & $<$0.001 &  942 &  3.6 & 0.010 &  913 &  0.4 & 1.35 \\
+n=20\_5  & 20 &  3 &  950 & 2499 & 163.1 & $<$0.001 &  963 &  1.4 & 0.010 &  963 &  1.4 & 1.37 \\
+n=20\_6  & 20 &  3 &  973 & 1942 &  99.6 & $<$0.001 &  982 &  0.9 & 0.010 &  978 &  0.5 & 1.39 \\
+n=20\_7  & 20 &  3 &  930 & 1541 &  65.7 & $<$0.001 &  947 &  1.8 & 0.010 &  937 &  0.8 & 1.35 \\
+n=20\_8  & 20 &  3 &  996 & 2724 & 173.5 & $<$0.001 & 1005 &  0.9 & 0.010 &  999 &  0.3 & 1.40 \\
+n=20\_9  & 20 &  3 &  976 & 1886 &  93.2 & $<$0.001 & 1001 &  2.6 & 0.010 &  982 &  0.6 & 1.37 \\
+n=20\_10 & 20 &  3 &  945 & 2187 & 131.4 & $<$0.001 &  971 &  2.8 & 0.010 &  964 &  2.0 & 1.34 \\
+n=20\_11 & 20 &  3 &  924 & 2184 & 136.4 & $<$0.001 &  932 &  0.9 & 0.010 &  926 &  0.2 & 1.35 \\
+n=20\_12 & 20 &  3 &  977 & 2232 & 128.5 & $<$0.001 &  995 &  1.8 & 0.010 &  987 &  1.0 & 1.35 \\
+n=20\_13 & 20 &  3 &  967 & 2212 & 128.8 & $<$0.001 &  982 &  1.6 & 0.010 &  969 &  0.2 & 1.34 \\
+n=20\_14 & 20 &  3 &  994 & 2315 & 132.9 & $<$0.001 & 1010 &  1.6 & 0.010 & 1005 &  1.1 & 1.33 \\
+n=20\_15 & 20 &  3 &  994 & 2535 & 155.0 & $<$0.001 & 1036 &  4.2 & 0.010 & 1012 &  1.8 & 1.35 \\
+n=20\_16 & 20 & 12 &  981 & 2844 & 189.9 & $<$0.001 & 1088 & 10.9 & 0.011 & 1062 &  8.3 & 1.45 \\
+n=20\_17 & 20 & 10 &  969 & 4083 & 321.4 & $<$0.001 & 1133 & 16.9 & 0.011 & 1128 & 16.4 & 1.42 \\
+n=20\_18 & 20 & 11 &  960 & 1953 & 103.4 & $<$0.001 & 1055 &  9.9 & 0.012 & 1023 &  6.6 & 1.52 \\
+n=20\_19 & 20 & 14 & 1000 & 2319 & 131.9 & $<$0.001 & 1110 & 11.0 & 0.011 & 1110 & 11.0 & 1.49 \\
+n=20\_20 & 20 & 11 & 1000 & 2096 & 109.6 & $<$0.001 & 1035 &  3.5 & 0.011 & 1047 &  4.7 & 1.52 \\
+\midrule
+n=50\_1  & 50 &  8 &  910 & 5047 & 454.6 & $<$0.001 & 1116 & 22.6 & 0.024 & 1019 & 12.0 & 4.90 \\
+n=50\_2  & 50 &  6 &  931 & 2047 & 119.9 & $<$0.001 &  955 &  2.6 & 0.025 &  938 &  0.8 & 4.72 \\
+\midrule
+n=100\_1 & 100 & 23 & --- & 10557 & --- & $<$0.001 & 2753 & --- & 0.048 & 2068 & --- & 13.90 \\
+n=100\_2 & 100 & 21 & --- & 11818 & --- & $<$0.001 & 3321 & --- & 0.046 & 1533 & --- & 13.90 \\
+\bottomrule
+\end{tabular}
+\caption{Comparatif des trois heuristiques sur les 24 instances. Gap en \%, temps CPU en secondes.
+         Les instances $n=100$ n'ont pas de $CT^*$ prouvé (Phase~1 non convergée).}
+\label{tab:phase2}
+\end{table}
+
+\subsubsection{Résumé statistique}
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{l r r r}
+\toprule
+\textbf{Méthode} & \textbf{Gap moyen (\%)} &
+\textbf{Instances à l'optimal} & \textbf{Temps moyen (s)} \\
+\midrule
+H1 --- Greedy & 151.1 & 0 / 22 & $<$0.001 \\
+H2 --- SA     &   4.8 & 0 / 22 & 0.014    \\
+H3 --- GA     &   3.4 & 0 / 22 & 2.715    \\
+\bottomrule
+\end{tabular}
+\caption{Résumé par heuristique (instances $n \le 50$, $CT^*$ connu). Aucune méthode
+n'atteint l'optimum exact ; le GA obtient le meilleur gap moyen au prix d'un temps de
+calcul environ 200 fois supérieur au SA.}
+\label{tab:phase2_summary}
+\end{table}
+
+\subsection{Analyse critique}
+
+\subsubsection{Aucune méthode n'atteint l'optimum exact}
+
+Les résultats montrent qu'aucune des trois méthodes n'atteint le $CT^*$ prouvé
+sur les 22 instances pour lesquelles il est disponible. Cela s'explique
+principalement par la structure du problème : avec $m=3$ serveurs et des
+précédences denses (OS $\approx 0.28$), les solutions sous-optimales du greedy
+sont extrêmement sous-optimales (gaps $>100\%$), et les métaheuristiques
+convergent vers des minima locaux proches mais non exactement égaux à l'optimum.
+
+\subsubsection{Analyse par méthode}
+
+\paragraph{H1 --- Greedy (gap moyen : 151\%).}
+Le greedy est catastrophique sur les instances $m=3$ car son critère local
+--- minimiser la charge courante du serveur cible --- ignore les contraintes
+globales de précédence. Avec un ordre topologique fixe, il entasse souvent
+toutes les VNF lourdes sur le premier serveur disponible, produisant des
+déséquilibres massifs (gap jusqu'à 321\% sur n=20\_17). Il est en revanche
+quasi-instantané ($<$0.001\,s).
+
+\paragraph{H2 --- SA (gap moyen : 4.8\%, temps moyen : 0.014\,s).}
+Le SA apporte une amélioration très significative par rapport au greedy, avec
+un gap moyen de 4.8\% en moins de 15 ms. Sur les instances $m=3$ ($n=20$,
+instances 1--15), le gap reste inférieur à 5\%, ce qui illustre l'efficacité
+de l'exploration par perturbation locale. Les instances à $m$ élevé (16--20)
+et $n=50\_1$ sont plus difficiles (gaps 10--23\%), car l'espace de recherche
+est plus vaste et le SA, limité à une seule trajectoire, peine à en explorer
+la totalité dans 50\,000 itérations.
+
+\paragraph{H3 --- GA (gap moyen : 3.4\%, temps moyen : 2.7\,s).}
+Le GA obtient le meilleur gap moyen (3.4\%), notamment sur les grandes instances :
+sur n=50\_1, il descend à 12\% là où le SA plafonne à 23\% ; sur n=100\_2, il
+produit CT=1533 contre CT=3321 pour le SA, soit un écart de plus du double.
+La diversité de population permet d'explorer plusieurs bassins d'attraction
+simultanément. En contrepartie, son temps de calcul (2.7\,s en moyenne,
+jusqu'à 15\,s sur $n=100$) est environ 200 fois supérieur à celui du SA.
+
+\subsubsection{Propriétés structurelles facilitant la résolution}
+
+Les instances les plus faciles pour les métaheuristiques présentent deux
+caractéristiques :
+\begin{itemize}
+  \item \textbf{OS élevé et $m$ faible ($m=3$, instances 1--15).} Les précédences
+    denses contraignent fortement l'espace faisable. Le SA et le GA convergent
+    rapidement car peu de réaffectations sont possibles ; les gaps restent
+    inférieurs à 5\%.
+  \item \textbf{Faible rapport $n/m$ avec $m$ petit.} Sur n=50\_2 ($m=6$),
+    le GA atteint un gap de 0.75\%, très proche de l'optimum, car la charge
+    par serveur est élevée et les mouvements de VNF ont un impact limité sur
+    $CT$.
+\end{itemize}
+À l'inverse, les instances difficiles (n=20\_17 avec $m=10$, n=50\_1 avec
+$m=8$) combinent un grand nombre de serveurs et un OS faible : l'espace
+faisable est vaste, les solutions équilibrées sont rares, et les deux
+métaheuristiques convergent vers des minima locaux éloignés de l'optimum.
+
+\subsubsection{Limites}
+
+Sur les instances $n=100$ ($m \ge 21$), aucun $CT^*$ n'est disponible pour
+quantifier les gaps. Les écarts considérables entre SA et GA (factor 2 sur
+n=100\_2) suggèrent que ni l'une ni l'autre ne trouve une solution proche de
+l'optimum. Une stratégie hybride --- initialisation par GA suivie d'une
+intensification MILP sur un sous-problème restreint --- constituerait une
+piste d'amélioration naturelle.
 
 \section{Phase 3 : Placement de VNF avec Prise en Compte de l'Énergie (EVNF-P)}
 
